@@ -25,6 +25,10 @@ function Workspace() {
   const [model, setModel] = useState('');
   const [side, setSide] = useState(desktop);
   const [q, setQ] = useState(''); const [input, setInput] = useState('');
+  const [temperature, setTemperature] = useState(() => {
+    const saved = Number(localStorage.getItem('nova.temperature'));
+    return Number.isFinite(saved) && saved >= 0 && saved <= 2 ? saved : 0.7;
+  });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const abort = useRef<AbortController | null>(null); const end = useRef<HTMLDivElement>(null); const stick = useRef(true);
 
@@ -47,9 +51,11 @@ function Workspace() {
   async function send(text: string) {
     text = text.trim(); if (!text || busy) return; setInput('');
     let id = activeId; if (!id) { id = (await api.create()).id; setActive(id); }
-    await run(id, { message: text }, [...msgs, { role: 'user', content: text }]);
+    await run(id, { message: text, temperature }, [...msgs, { role: 'user', content: text }]);
   }
-  const regen = () => activeId && run(activeId, { regenerate: true }, msgs.slice(0, msgs[msgs.length - 1]?.role === 'assistant' ? -1 : undefined));
+  const regen = () => activeId && run(activeId, { regenerate: true, temperature }, msgs.slice(0, msgs[msgs.length - 1]?.role === 'assistant' ? -1 : undefined));
+  const updateTemp = (v: number) => { setTemperature(v); localStorage.setItem('nova.temperature', String(v)); };
+  const tempLabel = temperature <= 0.3 ? 'Precise' : temperature <= 0.9 ? 'Balanced' : 'Creative';
   const ease = [0.23, 1, 0.32, 1] as const;
 
   return (
@@ -70,7 +76,29 @@ function Workspace() {
               <button className="px-1 text-neutral-500 hover:text-red-400" aria-label="Delete" onClick={async e => { e.stopPropagation(); if (confirm('Delete this conversation?')) { await api.remove(c.id); if (c.id === activeId) newChat(); refresh(); } }}>✕</button>
             </div>))}
         </div>
-        <div className="border-t border-white/10 pt-3 text-xs text-neutral-500">Model <span className="text-neutral-300 font-mono">{model}</span><br />Settings (model, system prompt, limits) live in backend/.env</div>
+        <div className="border-t border-white/10 pt-3 space-y-3">
+          <div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-neutral-400">Creativity</span>
+              <span className="font-mono text-neutral-300">{temperature.toFixed(1)} · {tempLabel}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.1}
+              value={temperature}
+              onChange={e => updateTemp(parseFloat(e.target.value))}
+              aria-label="Creativity temperature"
+              className="mt-1.5 w-full cursor-pointer accent-[#d9b779]"
+            />
+            <div className="flex justify-between text-[10px] text-neutral-500">
+              <span>Precise (0)</span>
+              <span>Creative (2)</span>
+            </div>
+          </div>
+          <div className="text-xs text-neutral-500">Model <span className="text-neutral-300 font-mono">{model}</span><br />Settings (model, system prompt, limits) live in backend/.env</div>
+        </div>
       </motion.aside>
 
       <main className="relative flex-1 min-w-0 flex flex-col">

@@ -43,7 +43,10 @@ app.delete('/api/conversations/:id', (q, r) => {
 });
 
 app.post('/api/chat', async (q, r) => {
-  const { conversationId, message, regenerate } = q.body || {};
+  const { conversationId, message, regenerate, temperature } = q.body || {};
+  const temp = typeof temperature === 'number' && Number.isFinite(temperature)
+    ? Math.min(2, Math.max(0, temperature))
+    : undefined;
   const c = db[conversationId];
   if (!c) return r.status(404).json({ error: 'Conversation not found' });
   if (regenerate) { while (c.messages.length && c.messages.at(-1).role === 'assistant') c.messages.pop(); }
@@ -62,6 +65,7 @@ app.post('/api/chat', async (q, r) => {
   try {
     const stream = await client.chat.completions.create({
       model: cfg.model, stream: true, max_tokens: cfg.maxTokens,
+      ...(temp !== undefined ? { temperature: temp } : {}),
       messages: [{ role: 'system', content: cfg.system }, ...c.messages.slice(-cfg.maxHistory)],
     }, { signal: ctrl.signal });
     for await (const part of stream) {
